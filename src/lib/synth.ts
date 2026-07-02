@@ -171,6 +171,32 @@ class GestureSynth {
       osc.stop(now + 0.7);
     } catch (e) {}
   }
+
+  public triggerShutter() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+      const now = this.ctx.currentTime;
+      
+      // Sci-fi digital shutter snap sound
+      const osc = this.ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(650, now);
+      osc.frequency.exponentialRampToValueAtTime(100, now + 0.12);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.3, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      
+      osc.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.16);
+    } catch (e) {}
+  }
 }
 
 export const synth = new GestureSynth();

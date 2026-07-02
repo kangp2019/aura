@@ -84,6 +84,18 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [foggyGlassMode, setFoggyGlassMode] = useState<boolean>(false);
   const [cameraFilter, setCameraFilter] = useState<'slate' | 'cyberpunk' | 'matrix' | 'thermal'>('slate');
   const [lightningFlash, setLightningFlash] = useState<boolean>(false);
+  const [portalShape, setPortalShape] = useState<'rectangle' | 'heart' | 'circle'>('rectangle');
+  const [showFlash, setShowFlash] = useState<boolean>(false);
+  const [isWinking, setIsWinking] = useState<boolean>(false);
+
+  // Periodic eye winking micro-animation effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsWinking(true);
+      setTimeout(() => setIsWinking(false), 320);
+    }, 3800);
+    return () => clearInterval(interval);
+  }, []);
 
   // Status & Simulator States
   const [loadingState, setLoadingState] = useState<string>('Initializing System...');
@@ -537,12 +549,42 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Trigger photographic white flash overlay
+    setShowFlash(true);
+    setTimeout(() => {
+      setShowFlash(false);
+    }, 180);
+
+    // Play digital camera shutter sound
+    synth.triggerShutter();
+
     // Create a download link
     const link = document.createElement('a');
     link.download = `AURA-OS-SNAPSHOT-${Date.now()}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
+
+  // Keyboard listener to simulate Eye Wink Snapshot via Space, W, or B keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === ' ' || key === 'b' || key === 'w') {
+        e.preventDefault();
+        saveSnapshot();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Draw HUD Mesh landmarks
   const drawHandMesh = (ctx: CanvasRenderingContext2D, landmarks: any[]) => {
@@ -584,6 +626,29 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         ctx.fill();
       });
     });
+  };
+
+  // Draw sci-fi customizable portal shape frame
+  const drawPortalPath = (context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, shape: 'rectangle' | 'heart' | 'circle', offset: number = 0) => {
+    context.beginPath();
+    if (shape === 'circle') {
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const r = Math.max(5, Math.min(w, h) / 2 + offset);
+      context.arc(cx, cy, r, 0, Math.PI * 2);
+    } else if (shape === 'heart') {
+      const cx = x - offset;
+      const cy = y - offset;
+      const cw = w + offset * 2;
+      const ch = h + offset * 2;
+      context.moveTo(cx + cw / 2, cy + ch * 0.25);
+      context.bezierCurveTo(cx + cw * 0.15, cy, cx, cy + ch * 0.2, cx, cy + ch * 0.5);
+      context.bezierCurveTo(cx, cy + ch * 0.75, cx + cw * 0.35, cy + ch * 0.9, cx + cw / 2, cy + ch);
+      context.bezierCurveTo(cx + cw * 0.65, cy + ch * 0.9, cx + cw, cy + ch * 0.75, cx + cw, cy + ch * 0.5);
+      context.bezierCurveTo(cx + cw, cy + ch * 0.2, cx + cw * 0.85, cy, cx + cw / 2, cy + ch * 0.25);
+    } else {
+      context.rect(x - offset, y - offset, w + offset * 2, h + offset * 2);
+    }
   };
 
   // Draw procedural fractal lightning bolt
@@ -1055,9 +1120,8 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         if (pw > 10 && ph > 10) {
           ctx.save();
           
-          // Draw a sci-fi scanning clipping area
-          ctx.beginPath();
-          ctx.rect(px_min, py_min, pw, ph);
+          // Draw a sci-fi scanning clipping area based on customizable portalShape
+          drawPortalPath(ctx, px_min, py_min, pw, ph, portalShape);
           ctx.clip();
 
           // Within the clip, draw the video stream in full-color
@@ -1066,36 +1130,38 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
           } else {
             // Simulator Color reveal: draw a vibrant futuristic grid of colors
             const grad = ctx.createLinearGradient(px_min, py_min, px_max, py_max);
-            grad.addColorStop(0, '#00FF5F');
+            grad.addColorStop(0, portalShape === 'heart' ? '#FF2A6D' : '#00FF5F');
             grad.addColorStop(0.5, '#00F0FF');
             grad.addColorStop(1, '#FF007F');
             ctx.fillStyle = grad;
-            ctx.fillRect(px_min, py_min, pw, ph);
+            ctx.fillRect(px_min - 20, py_min - 20, pw + 40, ph + 40);
 
             // Overlay scanning digital matrix code inside the portal
             ctx.fillStyle = 'rgba(15, 15, 15, 0.4)';
-            ctx.fillRect(px_min, py_min, pw, ph);
+            ctx.fillRect(px_min - 20, py_min - 20, pw + 40, ph + 40);
 
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.lineWidth = 1;
             for (let x = px_min + 15; x < px_max; x += 15) {
               ctx.beginPath();
-              ctx.moveTo(x, py_min);
-              ctx.lineTo(x, py_max);
+              ctx.moveTo(x, py_min - 20);
+              ctx.lineTo(x, py_max + 20);
               ctx.stroke();
             }
           }
 
           ctx.restore();
 
-          // Draw HUD Double Border
-          ctx.strokeStyle = '#00FF5F';
+          // Draw HUD Double Border conforming to portalShape
+          ctx.strokeStyle = portalShape === 'heart' ? '#FF2A6D' : '#00FF5F';
           ctx.lineWidth = 2.5;
-          ctx.strokeRect(px_min, py_min, pw, ph);
+          drawPortalPath(ctx, px_min, py_min, pw, ph, portalShape);
+          ctx.stroke();
 
-          ctx.strokeStyle = 'rgba(0, 255, 95, 0.3)';
+          ctx.strokeStyle = portalShape === 'heart' ? 'rgba(255, 42, 109, 0.3)' : 'rgba(0, 255, 95, 0.3)';
           ctx.lineWidth = 8;
-          ctx.strokeRect(px_min - 4, py_min - 4, pw + 8, ph + 8);
+          drawPortalPath(ctx, px_min, py_min, pw, ph, portalShape, 4);
+          ctx.stroke();
 
           // Digital corner crosshairs
           const cLen = Math.min(20, pw / 4);
@@ -1411,7 +1477,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2, foggyGlassMode, initializeFog, cameraFilter, lightningFlash]);
+  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2, foggyGlassMode, initializeFog, cameraFilter, lightningFlash, portalShape]);
 
   // Simulator Mouse Down Handler
   const handleSimMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1506,6 +1572,11 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
       {/* Primary Interaction Area */}
       <div className="relative flex-1 bg-black overflow-hidden bg-grid-dots">
+        {/* Photographic Shutter Flash Overlay */}
+        {showFlash && (
+          <div className="absolute inset-0 bg-white z-50 pointer-events-none transition-opacity duration-150 opacity-100" />
+        )}
+
         {/* Main Canvas covering full screen */}
         <canvas 
           ref={canvasRef} 
@@ -1597,6 +1668,58 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               </button>
             </div>
           )}
+
+          {/* Portal Shape Selector */}
+          <div className="flex bg-[#121212]/90 border border-zinc-800 rounded-full p-0.5 backdrop-blur-md shadow-[0_0_15px_rgba(0,0,0,0.5)]" title="Configure Portal Frame Shape">
+            <button
+              onClick={() => {
+                setPortalShape('rectangle');
+                synth.triggerShutter();
+              }}
+              className={`px-2.5 py-1 text-[9px] uppercase font-mono rounded-full tracking-wider transition-all flex items-center gap-1 cursor-pointer ${
+                portalShape === 'rectangle' ? 'bg-[#00FF5F]/20 text-[#00FF5F] font-bold border border-[#00FF5F]/35 shadow-[0_0_8px_rgba(0,255,95,0.25)]' : 'text-gray-400 hover:text-white border border-transparent'
+              }`}
+            >
+              <span>⏹️</span>
+              <span>Rect</span>
+            </button>
+            <button
+              onClick={() => {
+                setPortalShape('circle');
+                synth.triggerShutter();
+              }}
+              className={`px-2.5 py-1 text-[9px] uppercase font-mono rounded-full tracking-wider transition-all flex items-center gap-1 cursor-pointer ${
+                portalShape === 'circle' ? 'bg-[#00F0FF]/20 text-[#00F0FF] font-bold border border-[#00F0FF]/35 shadow-[0_0_8px_rgba(0,240,255,0.25)]' : 'text-gray-400 hover:text-white border border-transparent'
+              }`}
+            >
+              <span>🟢</span>
+              <span>Circle</span>
+            </button>
+            <button
+              onClick={() => {
+                setPortalShape('heart');
+                synth.triggerShutter();
+              }}
+              className={`px-2.5 py-1 text-[9px] uppercase font-mono rounded-full tracking-wider transition-all flex items-center gap-1 cursor-pointer ${
+                portalShape === 'heart' ? 'bg-[#FF2A6D]/20 text-[#FF2A6D] font-bold border border-[#FF2A6D]/35 shadow-[0_0_8px_rgba(255,42,109,0.25)]' : 'text-gray-400 hover:text-white border border-transparent'
+              }`}
+            >
+              <span>❤️</span>
+              <span>Heart</span>
+            </button>
+          </div>
+
+          {/* Interactive Wink Snapshot Badge / Button */}
+          <button
+            onClick={saveSnapshot}
+            className="px-3 py-1 bg-[#121212]/90 border border-purple-500/30 text-purple-400 hover:border-purple-400 hover:text-white rounded-full text-[9px] uppercase tracking-wider font-mono flex items-center gap-1.5 backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_12px_rgba(168,85,247,0.25)] group"
+            title="Wink / Blink your eye or press [Spacebar]/[B]/[W] to snap screenshot!"
+          >
+            <span className="text-xs group-hover:scale-125 transition-transform duration-200">
+              {isWinking ? '😉' : '👁️'}
+            </span>
+            <span className="tracking-widest">{isWinking ? 'WINK!' : 'WINK SNAP'}</span>
+          </button>
         </div>
 
         {/* Compact, elegant Simulator User Assistance Panel */}
