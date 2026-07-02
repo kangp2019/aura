@@ -134,16 +134,20 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         setLoadingProgress(85);
 
         // Try getting Webcam
-        await initWebcam();
+        const webcamSuccess = await initWebcam();
 
         if (active) {
+          if (!webcamSuccess) {
+            setCameraError('Webcam API rejected: Please allow camera access in frame or use Simulator.');
+            setUseSimulator(true);
+          }
           setIsReady(true);
           setLoadingProgress(100);
         }
       } catch (err: any) {
-        console.error('Webcam / MediaPipe error, falling back to mouse simulation:', err);
+        console.warn('MediaPipe or environment loading info, defaulting to simulator:', err);
         if (active) {
-          setCameraError(err.message || 'Webcam access denied or model loading failed.');
+          setCameraError(err?.message || 'WASM fileset not fully supported or webcam blocked.');
           setUseSimulator(true);
           setIsReady(true);
           setLoadingProgress(100);
@@ -165,7 +169,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   // Set up Webcam Stream
   const initWebcam = async () => {
     setCameraError(null);
-    if (!videoRef.current) return;
+    if (!videoRef.current) return false;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -181,8 +185,10 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
       videoRef.current.addEventListener('loadeddata', () => {
         videoRef.current?.play();
       });
+      return true;
     } catch (err: any) {
-      throw new Error('Webcam API rejected: Please allow camera access in frame or use Simulator.');
+      // Return false to let the caller handle it cleanly without raising uncaught exceptions
+      return false;
     }
   };
 
@@ -190,10 +196,9 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const toggleCamera = async () => {
     if (useSimulator) {
       setUseSimulator(false);
-      try {
-        await initWebcam();
-      } catch (e: any) {
-        setCameraError(e.message);
+      const success = await initWebcam();
+      if (!success) {
+        setCameraError('Webcam API rejected: Please allow camera access in frame or use Simulator.');
         setUseSimulator(true);
       }
     } else {
