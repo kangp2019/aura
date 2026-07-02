@@ -79,7 +79,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [pinchThreshold, setPinchThreshold] = useState<number>(0.04);
   const [grayscaleBackdrop, setGrayscaleBackdrop] = useState<number>(90); // grayscale percentage
   const [enableAudio, setEnableAudio] = useState<boolean>(false);
-  const [showMesh, setShowMesh] = useState<boolean>(true);
+  const [showMesh, setShowMesh] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [foggyGlassMode, setFoggyGlassMode] = useState<boolean>(false);
   const [cameraFilter, setCameraFilter] = useState<'slate' | 'cyberpunk' | 'matrix' | 'thermal'>('slate');
@@ -87,6 +87,8 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [portalShape, setPortalShape] = useState<'rectangle' | 'heart' | 'circle'>('heart');
   const [showFlash, setShowFlash] = useState<boolean>(false);
   const [isWinking, setIsWinking] = useState<boolean>(false);
+  const [showWebcamInfo, setShowWebcamInfo] = useState<boolean>(true);
+  const [showSimInfo, setShowSimInfo] = useState<boolean>(true);
 
   // Periodic eye winking micro-animation effect
   useEffect(() => {
@@ -1594,7 +1596,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         />
 
         {/* HUD Local Status Badges */}
-        <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2 max-w-[calc(100%-2rem)]">
+        <div className="hidden sm:flex absolute top-4 left-4 z-20 flex-wrap gap-2 max-w-[calc(100%-2rem)]">
           <button 
             id="camera-toggle-btn"
             onClick={toggleCamera}
@@ -1723,30 +1725,50 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         </div>
 
         {/* Compact, elegant Simulator User Assistance Panel */}
-        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 max-w-sm text-right select-none pointer-events-none sm:pointer-events-auto">
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 max-w-sm text-right select-none pointer-events-none">
           {useSimulator ? (
-            <div className="bg-[#101010]/92 border border-zinc-800 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left">
-              <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1">
-                💻 INTERACTIVE SIMULATOR
-              </span>
-              <p className="text-[10px] text-zinc-400 leading-normal mb-2">
-                Camera access is blocked or unavailable in this iframe. Use our responsive mouse/touch simulation below!
-              </p>
-              <div className="text-[9px] font-mono text-zinc-500 space-y-1 border-t border-zinc-900 pt-2">
-                <div className="flex justify-between"><span>[Cursor]</span> <span className="text-zinc-300">Hover tracking</span></div>
-                <div className="flex justify-between"><span>[Left-Click]</span> <span className="text-zinc-300">Pinch & Wipe/Paint</span></div>
-                <div className="flex justify-between"><span>[Double Hand]</span> <span className="text-zinc-300">Drag control dots</span></div>
+            showSimInfo && (
+              <div className="bg-[#101010]/92 border border-zinc-800 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left pointer-events-auto relative">
+                <button
+                  id="close-sim-info-btn"
+                  onClick={() => setShowSimInfo(false)}
+                  className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white rounded-full bg-zinc-900/50 hover:bg-zinc-800 transition-all border border-zinc-800/50 cursor-pointer"
+                  title="Close help tips"
+                >
+                  <span className="text-[9px]">✕</span>
+                </button>
+                <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1 pr-4">
+                  💻 INTERACTIVE SIMULATOR
+                </span>
+                <p className="text-[10px] text-zinc-400 leading-normal mb-2 pr-4">
+                  Camera access is blocked or unavailable in this iframe. Use our responsive mouse/touch simulation below!
+                </p>
+                <div className="text-[9px] font-mono text-zinc-500 space-y-1 border-t border-zinc-900 pt-2">
+                  <div className="flex justify-between"><span>[Cursor]</span> <span className="text-zinc-300">Hover tracking</span></div>
+                  <div className="flex justify-between"><span>[Left-Click]</span> <span className="text-zinc-300">Pinch & Wipe/Paint</span></div>
+                  <div className="flex justify-between"><span>[Double Hand]</span> <span className="text-zinc-300">Drag control dots</span></div>
+                </div>
               </div>
-            </div>
+            )
           ) : (
-            <div className="bg-[#101010]/92 border border-[#00FF5F]/20 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left">
-              <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1">
-                📷 WEBCAM CONTROL ACTIVE
-              </span>
-              <p className="text-[10px] text-zinc-300 leading-normal">
-                Symmetric double-hand mode is active! Make a <strong className="text-white font-semibold">thumb-index pinch</strong> gesture to wipe/paint with symmetric dual hands!
-              </p>
-            </div>
+            showWebcamInfo && (
+              <div className="bg-[#101010]/92 border border-[#00FF5F]/20 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left pointer-events-auto relative">
+                <button
+                  id="close-webcam-info-btn"
+                  onClick={() => setShowWebcamInfo(false)}
+                  className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white rounded-full bg-zinc-900/50 hover:bg-zinc-800 transition-all border border-zinc-800/50 cursor-pointer"
+                  title="Close help tips"
+                >
+                  <span className="text-[9px]">✕</span>
+                </button>
+                <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1 pr-4">
+                  📷 WEBCAM CONTROL ACTIVE
+                </span>
+                <p className="text-[10px] text-zinc-300 leading-normal pr-4">
+                  Symmetric double-hand mode is active! Make a <strong className="text-white font-semibold">thumb-index pinch</strong> gesture to wipe/paint with symmetric dual hands!
+                </p>
+              </div>
+            )
           )}
         </div>
 
@@ -1857,7 +1879,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
         {/* Collapsible iOS Sliders Panel */}
         {showSettings && (
-          <div className="mt-2 p-3 md:p-4 bg-[#181818] rounded-2xl border border-white/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 transition-all duration-300">
+          <div className="mt-2 p-3 md:p-4 bg-[#181818] rounded-2xl border border-white/5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 transition-all duration-300">
             {/* Brush Size */}
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between text-[11px] font-mono text-zinc-400 uppercase">
@@ -1913,7 +1935,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
             {/* Camera Filter Style Selector */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[11px] font-mono text-zinc-400 uppercase">Camera Filter</span>
-              <div className="flex bg-zinc-850 border border-zinc-800 rounded-xl p-0.5">
+              <div className="flex bg-[#222] border border-zinc-800 rounded-xl p-0.5">
                 {(['slate', 'cyberpunk', 'matrix', 'thermal'] as const).map(filter => {
                   const filterLabels = {
                     slate: 'Slate',
@@ -1938,20 +1960,148 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               </div>
             </div>
 
-            {/* Hand Mesh grid toggle */}
-            <div className="flex items-center justify-between h-full pt-1">
-              <span className="text-[11px] font-mono text-zinc-400 uppercase">Skeleton Mesh</span>
-              <button
-                id="mesh-toggle-btn"
-                onClick={() => setShowMesh(!showMesh)}
-                className={`px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider rounded-xl border transition-all cursor-pointer ${
-                  showMesh 
-                    ? 'bg-[#00FF5F]/15 border-[#00FF5F] text-[#00FF5F]' 
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                }`}
-              >
-                {showMesh ? 'Visible' : 'Hidden'}
-              </button>
+            {/* Portal Shape Selection */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Portal Shape</span>
+              <div className="flex bg-[#222] border border-zinc-800 rounded-xl p-0.5">
+                {(['rectangle', 'circle', 'heart'] as const).map(shape => {
+                  const shapeLabels = {
+                    rectangle: '⏹️ Rect',
+                    circle: '🟢 Circ',
+                    heart: '❤️ Heart'
+                  };
+                  return (
+                    <button
+                      key={shape}
+                      onClick={() => {
+                        setPortalShape(shape);
+                        synth.triggerShutter();
+                      }}
+                      className={`flex-1 py-1 text-[9px] uppercase font-mono rounded-lg tracking-wider transition-all cursor-pointer ${
+                        portalShape === shape 
+                          ? shape === 'heart'
+                            ? 'bg-[#FF2A6D]/20 text-[#FF2A6D] font-bold'
+                            : shape === 'circle'
+                              ? 'bg-[#00F0FF]/20 text-[#00F0FF] font-bold'
+                              : 'bg-[#00FF5F]/20 text-[#00FF5F] font-bold'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {shapeLabels[shape]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Input Source & Simulation mode */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Input Source</span>
+              <div className="flex flex-col gap-1.5">
+                <button 
+                  id="settings-camera-toggle-btn"
+                  onClick={toggleCamera}
+                  className={`w-full py-1 px-2 border rounded-xl text-[9px] uppercase tracking-wider font-mono flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer ${
+                    !useSimulator 
+                      ? 'bg-[#00FF5F]/15 border-[#00FF5F]/40 text-[#00FF5F]' 
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Camera className="w-3 h-3" />
+                  <span>{!useSimulator ? 'Camera Active' : 'Simulator Active'}</span>
+                </button>
+
+                {useSimulator && (
+                  <div className="flex bg-[#222] border border-zinc-800 rounded-xl p-0.5">
+                    <button
+                      id="settings-sim-single-btn"
+                      onClick={() => setSimHandsMode('single')}
+                      className={`flex-1 py-1 text-[9px] uppercase font-mono rounded-lg tracking-wider transition-all cursor-pointer ${
+                        simHandsMode === 'single' ? 'bg-zinc-700 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Symmetric
+                    </button>
+                    <button
+                      id="settings-sim-double-btn"
+                      onClick={() => setSimHandsMode('double')}
+                      className={`flex-1 py-1 text-[9px] uppercase font-mono rounded-lg tracking-wider transition-all cursor-pointer ${
+                        simHandsMode === 'double' ? 'bg-zinc-700 text-[#00FF5F] font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Manual
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Foggy Glass Environment */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Glass Window Fog</span>
+              <div className="flex flex-col gap-1.5">
+                <button 
+                  id="settings-foggy-toggle-btn"
+                  onClick={toggleFoggyMode}
+                  className={`w-full py-1 px-2 border rounded-xl text-[9px] uppercase tracking-wider font-mono flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer ${
+                    foggyGlassMode 
+                      ? 'bg-blue-500/15 border-blue-400/40 text-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.2)]' 
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span>🌧️</span>
+                  <span>{foggyGlassMode ? 'Foggy Mode: ON' : 'Foggy Mode: OFF'}</span>
+                </button>
+
+                {foggyGlassMode && (
+                  <div className="flex gap-1">
+                    <button 
+                      id="settings-breathe-mist-btn"
+                      onClick={breatheMist}
+                      className="flex-1 py-1 px-1.5 bg-zinc-800 border border-blue-500/20 text-blue-300 hover:text-white rounded-lg text-[9px] uppercase font-mono text-center cursor-pointer"
+                    >
+                      💨 Blow
+                    </button>
+                    <button 
+                      id="settings-strike-lightning-btn"
+                      onClick={triggerLightning}
+                      className="flex-1 py-1 px-1.5 bg-zinc-800 border border-amber-500/20 text-amber-300 hover:text-white rounded-lg text-[9px] uppercase font-mono text-center cursor-pointer"
+                    >
+                      ⚡ Lightn
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Extras, Hand Mesh & Quick Screenshot */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Extras & Capture</span>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between bg-[#222] border border-zinc-800 rounded-xl px-2.5 py-1">
+                  <span className="text-[9px] font-mono text-zinc-400 uppercase">Hand Mesh</span>
+                  <button
+                    id="settings-mesh-toggle-btn"
+                    onClick={() => setShowMesh(!showMesh)}
+                    className={`px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-lg border transition-all cursor-pointer ${
+                      showMesh 
+                        ? 'bg-[#00FF5F]/15 border-[#00FF5F] text-[#00FF5F]' 
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                    }`}
+                  >
+                    {showMesh ? 'Visible' : 'Hidden'}
+                  </button>
+                </div>
+
+                <button
+                  id="settings-wink-snap-btn"
+                  onClick={saveSnapshot}
+                  className="w-full py-1 px-2 bg-zinc-800 border border-purple-500/25 text-purple-400 hover:border-purple-400 hover:text-white rounded-xl text-[9px] uppercase tracking-wider font-mono flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer"
+                >
+                  <span>{isWinking ? '😉' : '👁️'}</span>
+                  <span>Wink Snapshot</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
