@@ -68,6 +68,9 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const animationFrameId = useRef<number | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const lastDrawingPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastH1PointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastH2PointRef = useRef<{ x: number; y: number } | null>(null);
+  const wasH2PinchingRef = useRef<boolean>(false);
 
   // App Settings States
   const [activeColor, setActiveColor] = useState(BRUSH_COLORS[0]);
@@ -732,127 +735,116 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         }
 
         if (result && result.landmarks && result.landmarks.length > 0) {
-          handsDetected = result.landmarks.length;
-          
-          if (handsDetected === 1) {
-            gestureMode = 'DRAWING';
-            // Single Hand Drawing Mode
-            const hand = result.landmarks[0];
-            const thumb = hand[4];  // Thumb Tip
-            const index = hand[8];  // Index Tip
+          const landmarksToProcess = [...result.landmarks];
+          if (landmarksToProcess.length === 1) {
+            // Synthesize a symmetric second hand by mirroring across the screen center
+            const h1 = landmarksToProcess[0];
+            const h2 = h1.map((pt: any) => ({
+              x: 1 - pt.x,
+              y: 1 - pt.y,
+              z: pt.z
+            }));
+            landmarksToProcess.push(h2);
+          }
 
-            // Normalize coordinate
-            const tx = (1 - thumb.x) * canvas.width;
-            const ty = thumb.y * canvas.height;
-            const ix = (1 - index.x) * canvas.width;
-            const iy = index.y * canvas.height;
+          handsDetected = 2; // Treat as double hand portal view
+          gestureMode = 'COLOR_PORTAL';
 
-            trackingX = ix;
-            trackingY = iy;
+          const h1 = landmarksToProcess[0];
+          const h2 = landmarksToProcess[1];
 
-            // Compute distance in 3D Space
-            const dx = thumb.x - index.x;
-            const dy = thumb.y - index.y;
-            const dz = thumb.z - index.z;
-            pinchDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          // Bounding points
+          const h1_thumb = h1[4];
+          const h1_index = h1[8];
+          const h2_thumb = h2[4];
+          const h2_index = h2[8];
 
-            isPinching = pinchDistance < pinchThreshold;
+          const all_x = [h1_thumb.x, h1_index.x, h2_thumb.x, h2_index.x];
+          const all_y = [h1_thumb.y, h1_index.y, h2_thumb.y, h2_index.y];
 
-            if (isPinching) {
-              const currentPt = { x: ix, y: iy };
-              
-              // Trigger shockwave & burst on first contact frame
-              if (!wasPinchingRef.current) {
-                triggerPinchBurst(ix, iy, brushColorValue);
-                wasPinchingRef.current = true;
-              }
+          const x_min = Math.max(0, Math.min(...all_x));
+          const y_min = Math.max(0, Math.min(...all_y));
+          const x_max = Math.min(1, Math.max(...all_x));
+          const y_max = Math.min(1, Math.max(...all_y));
 
-              // Draw continuous line
-              if (lastDrawingPointRef.current) {
-                drawSegment(drawCtx, lastDrawingPointRef.current, currentPt, brushColorValue, brushStyle, brushSize);
-              }
+          portalRect = { x_min, y_min, x_max, y_max };
 
-              // Emit Brush Particle Effect
-              spawnParticles(ix, iy, brushColorValue);
-              
-              lastDrawingPointRef.current = currentPt;
+          // Hand 1 coordinates & pinch
+          const h1_ix = (1 - h1_index.x) * canvas.width;
+          const h1_iy = h1_index.y * canvas.height;
+          const h1_dx = h1_thumb.x - h1_index.x;
+          const h1_dy = h1_thumb.y - h1_index.y;
+          const h1_dz = h1_thumb.z - h1_index.z;
+          const h1_dist = Math.sqrt(h1_dx * h1_dx + h1_dy * h1_dy + h1_dz * h1_dz);
+          const h1_isPinching = h1_dist < pinchThreshold;
 
-              // Synth Audio trigger
-              if (enableAudio) {
-                synth.start();
-                // Map coordinates to frequency: X bounds [0, width] -> [150, 850] Hz, Y bounds [0, height] -> [0.1, 0.9] res
-                const freq = 150 + (ix / canvas.width) * 700;
-                const filterRes = iy / canvas.height;
-                synth.update(freq, filterRes);
-              }
-            } else {
-              wasPinchingRef.current = false;
-              lastDrawingPointRef.current = null;
-              if (enableAudio) synth.stop();
+          // Hand 2 coordinates & pinch
+          const h2_ix = (1 - h2_index.x) * canvas.width;
+          const h2_iy = h2_index.y * canvas.height;
+          const h2_dx = h2_thumb.x - h2_index.x;
+          const h2_dy = h2_thumb.y - h2_index.y;
+          const h2_dz = h2_thumb.z - h2_index.z;
+          const h2_dist = Math.sqrt(h2_dx * h2_dx + h2_dy * h2_dy + h2_dz * h2_dz);
+          const h2_isPinching = h2_dist < pinchThreshold;
+
+          // Provide general tracking coordinates for popping bubbles
+          trackingX = h1_ix;
+          trackingY = h1_iy;
+
+          // Process Hand 1 drawing/wiping
+          if (h1_isPinching) {
+            const pt1 = { x: h1_ix, y: h1_iy };
+            if (!wasPinchingRef.current) {
+              triggerPinchBurst(h1_ix, h1_iy, brushColorValue);
+              wasPinchingRef.current = true;
             }
-
-            // Draw visual connection reticle on top
-            ctx.beginPath();
-            ctx.strokeStyle = isPinching ? '#00FF5F' : 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]);
-            ctx.moveTo(tx, ty);
-            ctx.lineTo(ix, iy);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // Draw finger-tip nodes
-            ctx.beginPath();
-            ctx.arc(tx, ty, 6, 0, Math.PI * 2);
-            ctx.fillStyle = activeColor.value === 'rainbow' ? '#FFF' : brushColorValue;
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(ix, iy, 8, 0, Math.PI * 2);
-            ctx.strokeStyle = isPinching ? '#00FF5F' : '#FFF';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Ripple on pinch
-            if (isPinching) {
-              ctx.beginPath();
-              ctx.arc(ix, iy, 12 + Math.sin(now / 100) * 4, 0, Math.PI * 2);
-              ctx.strokeStyle = 'rgba(0, 255, 95, 0.5)';
-              ctx.stroke();
+            if (lastH1PointRef.current) {
+              drawSegment(drawCtx, lastH1PointRef.current, pt1, brushColorValue, brushStyle, brushSize);
             }
+            spawnParticles(h1_ix, h1_iy, brushColorValue);
+            lastH1PointRef.current = pt1;
 
-          } else if (handsDetected >= 2) {
-            // Two Hands: Lens reveal mode
-            gestureMode = 'COLOR_PORTAL';
-            lastDrawingPointRef.current = null;
+            if (enableAudio) {
+              synth.start();
+              const freq = 150 + (h1_ix / canvas.width) * 700;
+              const filterRes = h1_iy / canvas.height;
+              synth.update(freq, filterRes);
+            }
+          } else {
+            lastH1PointRef.current = null;
+          }
+
+          // Process Hand 2 drawing/wiping
+          if (h2_isPinching) {
+            const pt2 = { x: h2_ix, y: h2_iy };
+            if (!wasH2PinchingRef.current) {
+              triggerPinchBurst(h2_ix, h2_iy, brushColorValue);
+              wasH2PinchingRef.current = true;
+            }
+            if (lastH2PointRef.current) {
+              drawSegment(drawCtx, lastH2PointRef.current, pt2, brushColorValue, brushStyle, brushSize);
+            }
+            spawnParticles(h2_ix, h2_iy, brushColorValue);
+            lastH2PointRef.current = pt2;
+          } else {
+            lastH2PointRef.current = null;
+          }
+
+          if (!h1_isPinching && !h2_isPinching) {
+            wasPinchingRef.current = false;
+            wasH2PinchingRef.current = false;
             if (enableAudio) synth.stop();
-
-            const h1 = result.landmarks[0];
-            const h2 = result.landmarks[1];
-
-            // Bounding points
-            const h1_thumb = h1[4];
-            const h1_index = h1[8];
-            const h2_thumb = h2[4];
-            const h2_index = h2[8];
-
-            const all_x = [h1_thumb.x, h1_index.x, h2_thumb.x, h2_index.x];
-            const all_y = [h1_thumb.y, h1_index.y, h2_thumb.y, h2_index.y];
-
-            const x_min = Math.max(0, Math.min(...all_x));
-            const y_min = Math.max(0, Math.min(...all_y));
-            const x_max = Math.min(1, Math.max(...all_x));
-            const y_max = Math.min(1, Math.max(...all_y));
-
-            portalRect = { x_min, y_min, x_max, y_max };
           }
 
           // Optionally draw hands skeleton mesh
           if (showMesh) {
-            drawHandMesh(ctx, result.landmarks);
+            drawHandMesh(ctx, landmarksToProcess);
           }
         } else {
-          lastDrawingPointRef.current = null;
+          lastH1PointRef.current = null;
+          lastH2PointRef.current = null;
+          wasPinchingRef.current = false;
+          wasH2PinchingRef.current = false;
           if (enableAudio) synth.stop();
         }
 
@@ -905,76 +897,110 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         ctx.fillText('● SIMULATOR ACTIVE', 32, 40);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.font = '9px var(--font-sans)';
-        ctx.fillText(`MODE: ${simHandsMode === 'single' ? '1-Hand Paint' : '2-Hand Portal'}`, 32, 58);
+        ctx.fillText(`MODE: ${simHandsMode === 'single' ? 'Symmetric' : 'Manual 2-Hand'}`, 32, 58);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.font = '9px var(--font-sans)';
         ctx.fillText('DRAG INTERACTIVE NODES', 32, 74);
 
         if (simHandsMode === 'single') {
-          // Single Hand Drawing Simulator
-          const handX = simHand1.x * canvas.width;
-          const handY = simHand1.y * canvas.height;
-          trackingX = handX;
-          trackingY = handY;
+          // Single Hand Symmetric Portal Simulator
+          const h1x = simHand1.x;
+          const h1y = simHand1.y;
+          const h2x = 1 - simHand1.x;
+          const h2y = 1 - simHand1.y;
+
+          const x_min = Math.min(h1x, h2x);
+          const y_min = Math.min(h1y, h2y);
+          const x_max = Math.max(h1x, h2x);
+          const y_max = Math.max(h1y, h2y);
+
+          portalRect = { x_min, y_min, x_max, y_max };
+
+          const h1_ix = h1x * canvas.width;
+          const h1_iy = h1y * canvas.height;
+          const h2_ix = h2x * canvas.width;
+          const h2_iy = h2y * canvas.height;
+
+          trackingX = h1_ix;
+          trackingY = h1_iy;
           isPinching = simHand1.isPinching;
-          pinchDistance = isPinching ? 0.01 : 0.08;
 
           if (isPinching) {
-            const currentPt = { x: handX, y: handY };
+            const pt1 = { x: h1_ix, y: h1_iy };
+            const pt2 = { x: h2_ix, y: h2_iy };
 
-            // Trigger shockwave & burst on first contact frame
             if (!wasPinchingRef.current) {
-              triggerPinchBurst(handX, handY, brushColorValue);
+              triggerPinchBurst(h1_ix, h1_iy, brushColorValue);
+              triggerPinchBurst(h2_ix, h2_iy, brushColorValue);
               wasPinchingRef.current = true;
             }
 
-            if (lastDrawingPointRef.current) {
-              drawSegment(drawCtx, lastDrawingPointRef.current, currentPt, brushColorValue, brushStyle, brushSize);
+            if (lastH1PointRef.current) {
+              drawSegment(drawCtx, lastH1PointRef.current, pt1, brushColorValue, brushStyle, brushSize);
             }
-            
-            spawnParticles(handX, handY, brushColorValue);
-            lastDrawingPointRef.current = currentPt;
+            if (lastH2PointRef.current) {
+              drawSegment(drawCtx, lastH2PointRef.current, pt2, brushColorValue, brushStyle, brushSize);
+            }
+
+            spawnParticles(h1_ix, h1_iy, brushColorValue);
+            spawnParticles(h2_ix, h2_iy, brushColorValue);
+
+            lastH1PointRef.current = pt1;
+            lastH2PointRef.current = pt2;
 
             if (enableAudio) {
               synth.start();
-              const freq = 150 + (handX / canvas.width) * 700;
-              const filterRes = handY / canvas.height;
+              const freq = 150 + (h1_ix / canvas.width) * 700;
+              const filterRes = h1_iy / canvas.height;
               synth.update(freq, filterRes);
             }
           } else {
             wasPinchingRef.current = false;
-            lastDrawingPointRef.current = null;
+            lastH1PointRef.current = null;
+            lastH2PointRef.current = null;
             if (enableAudio) synth.stop();
           }
 
-          // Draw Simulated Hand Rig Visualizer
-          ctx.beginPath();
-          ctx.arc(handX, handY, isPinching ? 15 : 25, 0, Math.PI * 2);
-          ctx.strokeStyle = isPinching ? '#00FF5F' : 'rgba(255, 255, 255, 0.3)';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
+          // Draw Simulated Rigs (both real and mirrored)
+          const handsToDraw = [
+            { x: h1x, y: h1y, isPinching, label: 'SIM_HAND_REAL' },
+            { x: h2x, y: h2y, isPinching, label: 'SIM_HAND_SYMMETRIC' }
+          ];
 
-          // Connective lines to look mechanical
-          ctx.beginPath();
-          ctx.moveTo(handX, handY);
-          ctx.lineTo(handX - 25, handY + 40);
-          ctx.lineTo(handX + 25, handY + 40);
-          ctx.closePath();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-          ctx.stroke();
+          handsToDraw.forEach((hand, idx) => {
+            const hx = hand.x * canvas.width;
+            const hy = hand.y * canvas.height;
+            ctx.beginPath();
+            ctx.arc(hx, hy, hand.isPinching ? 15 : 25, 0, Math.PI * 2);
+            ctx.strokeStyle = idx === 0 ? '#00FF5F' : 'rgba(0, 255, 95, 0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
 
-          // Finger tip dots
-          ctx.beginPath();
-          ctx.arc(handX - 5, handY - (isPinching ? 2 : 12), 4, 0, Math.PI * 2);
-          ctx.arc(handX + 5, handY - (isPinching ? 2 : 12), 4, 0, Math.PI * 2);
-          ctx.fillStyle = isPinching ? '#00FF5F' : 'rgba(255, 255, 255, 0.6)';
-          ctx.fill();
+            // Connective lines to look mechanical
+            ctx.beginPath();
+            ctx.moveTo(hx, hy);
+            ctx.lineTo(hx - 25, hy + 40);
+            ctx.lineTo(hx + 25, hy + 40);
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.stroke();
 
-          ctx.fillStyle = '#FFF';
-          ctx.font = '10px monospace';
-          ctx.fillText('INDEX_TIP', handX + 15, handY - 10);
+            // Finger tip dots
+            ctx.beginPath();
+            ctx.arc(hx - 5, hy - (hand.isPinching ? 2 : 12), 4, 0, Math.PI * 2);
+            ctx.arc(hx + 5, hy - (hand.isPinching ? 2 : 12), 4, 0, Math.PI * 2);
+            ctx.fillStyle = hand.isPinching ? '#00FF5F' : 'rgba(255, 255, 255, 0.6)';
+            ctx.fill();
+            
+            ctx.fillStyle = idx === 0 ? '#00FF5F' : 'rgba(0, 255, 95, 0.7)';
+            ctx.font = '10px monospace';
+            ctx.fillText(hand.label, hx + 12, hy - 5);
+          });
         } else {
-          // Double Hand Lens Simulator
-          lastDrawingPointRef.current = null;
+          // Double Hand Lens Simulator (Manual / Asymmetric)
+          lastH1PointRef.current = null;
+          lastH2PointRef.current = null;
+          wasPinchingRef.current = false;
           if (enableAudio) synth.stop();
 
           const h1x = simHand1.x;
@@ -1558,7 +1584,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
                   simHandsMode === 'single' ? 'bg-[#333] text-white' : 'text-gray-400 hover:text-white'
                 }`}
               >
-                1 Hand Draw
+                Symmetric Portal
               </button>
               <button
                 id="sim-double-btn"
@@ -1567,7 +1593,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
                   simHandsMode === 'double' ? 'bg-[#333] text-[#00FF5F]' : 'text-gray-400 hover:text-[#00FF5F]'
                 }`}
               >
-                2 Hand Portal
+                Manual Portal
               </button>
             </div>
           )}
@@ -1585,7 +1611,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               </p>
               <div className="text-[9px] font-mono text-zinc-500 space-y-1 border-t border-zinc-900 pt-2">
                 <div className="flex justify-between"><span>[Cursor]</span> <span className="text-zinc-300">Hover tracking</span></div>
-                <div className="flex justify-between"><span>[Left-Click]</span> <span className="text-zinc-300">Pinch & Paint/Wipe</span></div>
+                <div className="flex justify-between"><span>[Left-Click]</span> <span className="text-zinc-300">Pinch & Wipe/Paint</span></div>
                 <div className="flex justify-between"><span>[Double Hand]</span> <span className="text-zinc-300">Drag control dots</span></div>
               </div>
             </div>
@@ -1595,7 +1621,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
                 📷 WEBCAM CONTROL ACTIVE
               </span>
               <p className="text-[10px] text-zinc-300 leading-normal">
-                Make a <strong className="text-white font-semibold">thumb-index pinch</strong> gesture to draw! In Foggy Window mode, pinch and wipe to clean the glass!
+                Symmetric double-hand mode is active! Make a <strong className="text-white font-semibold">thumb-index pinch</strong> gesture to wipe/paint with symmetric dual hands!
               </p>
             </div>
           )}
