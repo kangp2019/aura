@@ -2,6 +2,8 @@
 
 A high-performance, open-source client-side gesture interactive canvas designed with beautiful, minimal iOS UI aesthetics. Powered by **MediaPipe WebAssembly** (WASM) and built with **Vite + React 19**, it maps physical hand coordinates into spatial commands in real-time.
 
+🌐 **Live Demo / Online Access**: [https://aura.kangpeng.dev/](https://aura.kangpeng.dev/)
+
 ---
 
 ## ✨ Key Features
