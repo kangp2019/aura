@@ -76,6 +76,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [enableAudio, setEnableAudio] = useState<boolean>(false);
   const [showMesh, setShowMesh] = useState<boolean>(true);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [foggyGlassMode, setFoggyGlassMode] = useState<boolean>(false);
 
   // Status & Simulator States
   const [loadingState, setLoadingState] = useState<string>('Initializing System...');
@@ -94,6 +95,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const fpsTracker = useRef<{ lastTime: number; frames: number; fps: number }>({ lastTime: performance.now(), frames: 0, fps: 0 });
   const particles = useRef<Particle[]>([]);
   const ripples = useRef<Ripple[]>([]);
+  const waterDrops = useRef<Array<{ x: number; y: number; speed: number; size: number; trailWidth: number }>>([]);
   const wasPinchingRef = useRef<boolean>(false);
   const rainbowHue = useRef<number>(0);
 
@@ -271,7 +273,16 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
     drawCtx.lineCap = 'round';
     drawCtx.lineJoin = 'round';
 
-    if (style === 'neon') {
+    if (foggyGlassMode) {
+      // Wiping glass: erase the fog!
+      drawCtx.globalCompositeOperation = 'destination-out';
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+      drawCtx.lineWidth = size * 3.5; // Wider brush for wiping window fog, very satisfying!
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+    } else if (style === 'neon') {
       // 1. Wide halo glow layer
       drawCtx.beginPath();
       drawCtx.strokeStyle = color;
@@ -375,14 +386,69 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
     });
   };
 
+  // Fill the drawing canvas with beautiful foggy window mist
+  const initializeFog = useCallback(() => {
+    const drawCanvas = drawingCanvasRef.current;
+    if (!drawCanvas) return;
+    const ctx = drawCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    
+    // Gradient for realistic fog: slightly darker towards bottom, soft bluish tint
+    const grad = ctx.createLinearGradient(0, 0, 0, drawCanvas.height);
+    grad.addColorStop(0, 'rgba(235, 243, 250, 0.96)');
+    grad.addColorStop(1, 'rgba(215, 227, 240, 0.98)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    
+    // Add micro-condensation drops to simulate a foggy surface
+    for (let i = 0; i < 350; i++) {
+      const rx = Math.random() * drawCanvas.width;
+      const ry = Math.random() * drawCanvas.height;
+      const rRad = Math.random() * 3 + 1;
+      ctx.beginPath();
+      ctx.arc(rx, ry, rRad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fill();
+    }
+    ctx.restore();
+    waterDrops.current = [];
+  }, []);
+
   // Erase the draw canvas
   const clearCanvas = () => {
     const drawCanvas = drawingCanvasRef.current;
     if (drawCanvas) {
       const ctx = drawCanvas.getContext('2d');
-      ctx?.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      if (ctx) {
+        ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        if (foggyGlassMode) {
+          initializeFog();
+        }
+      }
     }
     particles.current = [];
+    waterDrops.current = [];
+  };
+
+  // Toggle Foggy Glass mode
+  const toggleFoggyMode = () => {
+    setFoggyGlassMode(prev => {
+      const next = !prev;
+      if (next) {
+        setTimeout(() => {
+          initializeFog();
+        }, 50);
+      } else {
+        const drawCanvas = drawingCanvasRef.current;
+        if (drawCanvas) {
+          const ctx = drawCanvas.getContext('2d');
+          ctx?.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        }
+      }
+      return next;
+    });
   };
 
   // Download canvas doodle
@@ -930,6 +996,95 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
       ripples.current = ripples.current.filter(r => r.alpha > 0);
 
       // ------------------------------------
+      // SECTION E3: FOGGY WINDOW WATER TRICKLE SYSTEM
+      // ------------------------------------
+      if (foggyGlassMode) {
+        // Draw subtle ambient rain falling lines in background (cyberpunk grid area)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(174, 219, 255, 0.12)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 4; i++) {
+          const rx = Math.random() * canvas.width;
+          const ry = Math.random() * canvas.height;
+          const rlen = Math.random() * 35 + 15;
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.lineTo(rx - 1, ry + rlen);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // 1. Spontaneous condensation droplet spawning at random top positions
+        if (Math.random() < 0.015 && waterDrops.current.length < 18) {
+          waterDrops.current.push({
+            x: Math.random() * canvas.width,
+            y: 0,
+            speed: Math.random() * 1.5 + 0.8,
+            size: Math.random() * 2.5 + 1.5,
+            trailWidth: Math.random() * 2.5 + 2.0
+          });
+        }
+
+        // 2. Trickle down new water drops from finger tip if the user is actively wiping!
+        if (isPinching && Math.random() < 0.12 && waterDrops.current.length < 28) {
+          waterDrops.current.push({
+            x: trackingX + (Math.random() - 0.5) * 12,
+            y: trackingY + 4,
+            speed: Math.random() * 2.8 + 1.2,
+            size: Math.random() * 3.0 + 1.8,
+            trailWidth: Math.random() * 3.0 + 2.5
+          });
+        }
+
+        // 3. Process and erase trails on drawingCanvas
+        const drawCtx = drawingCanvas.getContext('2d');
+        if (drawCtx) {
+          waterDrops.current.forEach(drop => {
+            const prevY = drop.y;
+            drop.y += drop.speed;
+            
+            // Give organic wiggling slide paths
+            drop.x += (Math.random() - 0.5) * 0.5;
+
+            // Erase a trace trail through the fog
+            drawCtx.save();
+            drawCtx.globalCompositeOperation = 'destination-out';
+            drawCtx.beginPath();
+            drawCtx.strokeStyle = 'rgba(0,0,0,1)';
+            drawCtx.lineWidth = drop.trailWidth;
+            drawCtx.lineCap = 'round';
+            drawCtx.moveTo(drop.x, prevY);
+            drawCtx.lineTo(drop.x, drop.y);
+            drawCtx.stroke();
+            drawCtx.restore();
+          });
+        }
+
+        // 4. Render interactive water drop bodies on the display canvas
+        waterDrops.current.forEach(drop => {
+          ctx.save();
+          // Draw glass bead droplet
+          ctx.beginPath();
+          ctx.arc(drop.x, drop.y, drop.size, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.lineWidth = 1;
+          ctx.fill();
+          ctx.stroke();
+
+          // Highlight reflection glint
+          ctx.beginPath();
+          ctx.arc(drop.x - drop.size * 0.35, drop.y - drop.size * 0.35, drop.size * 0.22, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Clear out drops that fall past bottom edge
+        waterDrops.current = waterDrops.current.filter(drop => drop.y < canvas.height);
+      }
+
+      // ------------------------------------
       // SECTION F: UPDATE HUD CONTROLLER STATE
       // ------------------------------------
       onStatsUpdate({
@@ -952,7 +1107,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2]);
+  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2, foggyGlassMode, initializeFog]);
 
   // Simulator Mouse Down Handler
   const handleSimMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1064,7 +1219,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         />
 
         {/* HUD Local Status Badges */}
-        <div className="absolute top-4 left-4 z-20 flex gap-2">
+        <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2 max-w-[calc(100%-2rem)]">
           <button 
             id="camera-toggle-btn"
             onClick={toggleCamera}
@@ -1076,6 +1231,20 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
           >
             {!useSimulator ? <Camera className="w-3.5 h-3.5 animate-pulse" /> : <CameraOff className="w-3.5 h-3.5" />}
             <span>{!useSimulator ? 'Camera Feed' : 'Simulator Mode'}</span>
+          </button>
+
+          <button 
+            id="foggy-toggle-btn"
+            onClick={toggleFoggyMode}
+            className={`px-3 py-1.5 border rounded-full text-[10px] uppercase tracking-widest font-mono flex items-center gap-2 backdrop-blur-md transition-all duration-300 ${
+              foggyGlassMode 
+                ? 'bg-blue-500/20 border-blue-400 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-pulse' 
+                : 'bg-[#151515] border-[#333] text-gray-400 hover:border-white hover:text-white'
+            }`}
+            title="Rainy Window Foggy Wiping Mode"
+          >
+            <span>🌧️</span>
+            <span>{foggyGlassMode ? 'Foggy Glass (雾气擦玻璃): ON' : '🌧️ Foggy Glass (哈气擦玻璃)'}</span>
           </button>
 
           {useSimulator && (
