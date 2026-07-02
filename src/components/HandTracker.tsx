@@ -36,6 +36,16 @@ interface Particle {
   type: string;
 }
 
+interface Ripple {
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  color: string;
+  alpha: number;
+  speed: number;
+}
+
 interface HandTrackerProps {
   onStatsUpdate: (stats: {
     fps: number;
@@ -83,6 +93,8 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   // Live FPS and states for animation loop
   const fpsTracker = useRef<{ lastTime: number; frames: number; fps: number }>({ lastTime: performance.now(), frames: 0, fps: 0 });
   const particles = useRef<Particle[]>([]);
+  const ripples = useRef<Ripple[]>([]);
+  const wasPinchingRef = useRef<boolean>(false);
   const rainbowHue = useRef<number>(0);
 
   // Setup MediaPipe Hand Landmarker
@@ -246,6 +258,123 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
     }
   };
 
+  // Draw continuous lines with gorgeous visual enhancements
+  const drawSegment = (
+    drawCtx: CanvasRenderingContext2D,
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+    color: string,
+    style: string,
+    size: number
+  ) => {
+    drawCtx.save();
+    drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+
+    if (style === 'neon') {
+      // 1. Wide halo glow layer
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 2.8;
+      drawCtx.globalAlpha = 0.16;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+
+      // 2. Medium vibrant glow layer
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 1.4;
+      drawCtx.globalAlpha = 0.45;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+
+      // 3. Bright high-contrast white core
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = '#FFFFFF';
+      drawCtx.lineWidth = size * 0.35;
+      drawCtx.globalAlpha = 1.0;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+    } else if (style === 'ribbon') {
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      const perpX = Math.sin(angle) * (size * 1.6);
+      const perpY = -Math.cos(angle) * (size * 1.6);
+
+      // Thread A (Offset left)
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 0.25;
+      drawCtx.globalAlpha = 0.7;
+      drawCtx.moveTo(p1.x - perpX, p1.y - perpY);
+      drawCtx.lineTo(p2.x - perpX, p2.y - perpY);
+      drawCtx.stroke();
+
+      // Thread B (Main center)
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 0.6;
+      drawCtx.globalAlpha = 1.0;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+
+      // Thread C (Offset right)
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 0.25;
+      drawCtx.globalAlpha = 0.7;
+      drawCtx.moveTo(p1.x + perpX, p1.y + perpY);
+      drawCtx.lineTo(p2.x + perpX, p2.y + perpY);
+      drawCtx.stroke();
+    } else {
+      // Default: Clean smooth solid line
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size;
+      drawCtx.globalAlpha = 1.0;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+    }
+    drawCtx.restore();
+  };
+
+  // Pinch Shockwave Ripple and Twinkle Starburst Spawner
+  const triggerPinchBurst = (x: number, y: number, colorVal: string) => {
+    const burstColor = colorVal === 'rainbow' ? `hsl(${rainbowHue.current}, 100%, 65%)` : colorVal;
+    
+    // Spawns 14 energetic star particles flying outwards in directions
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+      const speed = Math.random() * 4.5 + 2.5;
+      particles.current.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: burstColor,
+        size: Math.random() * 4.5 + 2.5,
+        maxLife: Math.random() * 30 + 15,
+        life: 0,
+        type: 'stars'
+      });
+    }
+
+    // Expanding spatial sonar ring ripple
+    ripples.current.push({
+      x,
+      y,
+      radius: 6,
+      maxRadius: 75 + Math.random() * 15,
+      color: burstColor,
+      alpha: 0.9,
+      speed: 3.5
+    });
+  };
+
   // Erase the draw canvas
   const clearCanvas = () => {
     const drawCanvas = drawingCanvasRef.current;
@@ -402,24 +531,15 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
             if (isPinching) {
               const currentPt = { x: ix, y: iy };
               
+              // Trigger shockwave & burst on first contact frame
+              if (!wasPinchingRef.current) {
+                triggerPinchBurst(ix, iy, brushColorValue);
+                wasPinchingRef.current = true;
+              }
+
               // Draw continuous line
               if (lastDrawingPointRef.current) {
-                drawCtx.beginPath();
-                drawCtx.strokeStyle = brushColorValue;
-                drawCtx.lineWidth = brushSize;
-                drawCtx.lineCap = 'round';
-                drawCtx.lineJoin = 'round';
-
-                if (brushStyle === 'neon') {
-                  drawCtx.shadowColor = brushColorValue;
-                  drawCtx.shadowBlur = brushSize * 1.5;
-                } else {
-                  drawCtx.shadowBlur = 0;
-                }
-
-                drawCtx.moveTo(lastDrawingPointRef.current.x, lastDrawingPointRef.current.y);
-                drawCtx.lineTo(currentPt.x, currentPt.y);
-                drawCtx.stroke();
+                drawSegment(drawCtx, lastDrawingPointRef.current, currentPt, brushColorValue, brushStyle, brushSize);
               }
 
               // Emit Brush Particle Effect
@@ -436,6 +556,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
                 synth.update(freq, filterRes);
               }
             } else {
+              wasPinchingRef.current = false;
               lastDrawingPointRef.current = null;
               if (enableAudio) synth.stop();
             }
@@ -557,21 +678,15 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
           if (isPinching) {
             const currentPt = { x: handX, y: handY };
+
+            // Trigger shockwave & burst on first contact frame
+            if (!wasPinchingRef.current) {
+              triggerPinchBurst(handX, handY, brushColorValue);
+              wasPinchingRef.current = true;
+            }
+
             if (lastDrawingPointRef.current) {
-              drawCtx.beginPath();
-              drawCtx.strokeStyle = brushColorValue;
-              drawCtx.lineWidth = brushSize;
-              drawCtx.lineCap = 'round';
-              drawCtx.lineJoin = 'round';
-
-              if (brushStyle === 'neon') {
-                drawCtx.shadowColor = brushColorValue;
-                drawCtx.shadowBlur = brushSize * 1.5;
-              }
-
-              drawCtx.moveTo(lastDrawingPointRef.current.x, lastDrawingPointRef.current.y);
-              drawCtx.lineTo(currentPt.x, currentPt.y);
-              drawCtx.stroke();
+              drawSegment(drawCtx, lastDrawingPointRef.current, currentPt, brushColorValue, brushStyle, brushSize);
             }
             
             spawnParticles(handX, handY, brushColorValue);
@@ -584,6 +699,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               synth.update(freq, filterRes);
             }
           } else {
+            wasPinchingRef.current = false;
             lastDrawingPointRef.current = null;
             if (enableAudio) synth.stop();
           }
@@ -787,6 +903,31 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
       // Filter out dead particles
       particles.current = particles.current.filter(p => p.life < p.maxLife);
+
+      // ------------------------------------
+      // SECTION E2: DRAW & ANIMATE EXPANDING RIPPLES
+      // ------------------------------------
+      ripples.current.forEach((r) => {
+        r.radius += r.speed;
+        r.alpha -= 0.02; // fade out gently
+
+        if (r.alpha > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = r.color;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = r.alpha;
+          // Add neon shadow glow to expanding ripples
+          ctx.shadowColor = r.color;
+          ctx.shadowBlur = 12;
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+
+      // Filter out dead ripples
+      ripples.current = ripples.current.filter(r => r.alpha > 0);
 
       // ------------------------------------
       // SECTION F: UPDATE HUD CONTROLLER STATE
