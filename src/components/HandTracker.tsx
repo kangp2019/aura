@@ -20,6 +20,8 @@ export const BRUSH_COLORS = [
 export const BRUSH_STYLES = [
   { id: 'neon', name: 'Neon Glow', icon: '✨' },
   { id: 'stars', name: 'Star Particles', icon: '⭐' },
+  { id: 'bubbles', name: 'Soap Bubbles', icon: '🫧' },
+  { id: 'fireworks', name: 'Magic Sparkler', icon: '🎇' },
   { id: 'squares', name: 'Digital Blocks', icon: '⏹️' },
   { id: 'ribbon', name: 'Fluid Ribbon', icon: '🎗️' }
 ];
@@ -77,6 +79,8 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [showMesh, setShowMesh] = useState<boolean>(true);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [foggyGlassMode, setFoggyGlassMode] = useState<boolean>(false);
+  const [cameraFilter, setCameraFilter] = useState<'slate' | 'cyberpunk' | 'matrix' | 'thermal'>('slate');
+  const [lightningFlash, setLightningFlash] = useState<boolean>(false);
 
   // Status & Simulator States
   const [loadingState, setLoadingState] = useState<string>('Initializing System...');
@@ -242,21 +246,60 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
   // Particle Spawner
   const spawnParticles = (x: number, y: number, colorVal: string) => {
-    const count = brushStyle === 'stars' ? 5 : 2;
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 2 + 1;
-      particles.current.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 0.5, // float up
-        color: colorVal === 'rainbow' ? `hsl(${rainbowHue.current}, 90%, 60%)` : colorVal,
-        size: Math.random() * 4 + 2,
-        maxLife: Math.random() * 20 + 15,
-        life: 0,
-        type: brushStyle
-      });
+    const activeColorHex = colorVal === 'rainbow' ? `hsl(${rainbowHue.current}, 90%, 60%)` : colorVal;
+    
+    if (brushStyle === 'bubbles') {
+      // Spawns soap bubbles organically
+      if (Math.random() < 0.28) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 0.8 + 0.2;
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: -Math.random() * 1.5 - 0.4, // Float up gently
+          color: activeColorHex,
+          size: Math.random() * 12 + 6, // Larger bubble size
+          maxLife: Math.random() * 90 + 60,
+          life: 0,
+          type: 'bubbles'
+        });
+      }
+    } else if (brushStyle === 'fireworks') {
+      // Magic Sparkler / Burning embers
+      const count = 4;
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.random() * Math.PI - 0.1; // shoot upwards/outwards
+        const speed = Math.random() * 2.8 + 1.2;
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 0.8,
+          vy: Math.sin(angle) * speed - 0.5,
+          color: Math.random() < 0.38 ? '#FFDF00' : (Math.random() < 0.5 ? '#FF6A00' : '#FF1A00'),
+          size: Math.random() * 3 + 1.5,
+          maxLife: Math.random() * 45 + 20,
+          life: 0,
+          type: 'fireworks'
+        });
+      }
+    } else {
+      const count = brushStyle === 'stars' ? 5 : 2;
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 2 + 1;
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.5, // float up
+          color: activeColorHex,
+          size: Math.random() * 4 + 2,
+          maxLife: Math.random() * 20 + 15,
+          life: 0,
+          type: brushStyle
+        });
+      }
     }
   };
 
@@ -282,6 +325,36 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
       drawCtx.moveTo(p1.x, p1.y);
       drawCtx.lineTo(p2.x, p2.y);
       drawCtx.stroke();
+    } else if (style === 'bubbles') {
+      // Soft soapy iridescent fluid trace
+      drawCtx.save();
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = color;
+      drawCtx.lineWidth = size * 1.5;
+      drawCtx.globalAlpha = 0.08;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = '#FFFFFF';
+      drawCtx.lineWidth = size * 0.4;
+      drawCtx.globalAlpha = 0.15;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+      drawCtx.restore();
+    } else if (style === 'fireworks') {
+      // Glowing embers spark trail
+      drawCtx.save();
+      drawCtx.beginPath();
+      drawCtx.strokeStyle = '#FF8800';
+      drawCtx.lineWidth = size * 0.4;
+      drawCtx.globalAlpha = 0.25;
+      drawCtx.moveTo(p1.x, p1.y);
+      drawCtx.lineTo(p2.x, p2.y);
+      drawCtx.stroke();
+      drawCtx.restore();
     } else if (style === 'neon') {
       // 1. Wide halo glow layer
       drawCtx.beginPath();
@@ -505,6 +578,84 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
     });
   };
 
+  // Draw procedural fractal lightning bolt
+  const drawLightningBolt = (ctx: CanvasRenderingContext2D, startX: number, startY: number, endX: number, endY: number) => {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(215, 245, 255, 0.95)';
+    ctx.lineWidth = Math.random() * 2.5 + 1.5;
+    ctx.shadowColor = 'rgba(0, 180, 255, 0.8)';
+    ctx.shadowBlur = 15;
+    
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    
+    let currentX = startX;
+    let currentY = startY;
+    const steps = 10;
+    const dx = (endX - startX) / steps;
+    const dy = (endY - startY) / steps;
+    
+    for (let i = 1; i < steps; i++) {
+      // Add random displacement for classic jagged look
+      currentX += dx + (Math.random() - 0.5) * 30;
+      currentY += dy + (Math.random() - 0.5) * 12;
+      ctx.lineTo(currentX, currentY);
+    }
+    
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // Trigger manual or automatic lightning event
+  const triggerLightning = () => {
+    setLightningFlash(true);
+    if (enableAudio) {
+      synth.triggerSpark();
+    }
+    setTimeout(() => {
+      setLightningFlash(false);
+    }, 150);
+  };
+
+  // Add warm breath mist to simulate breathing on the glass
+  const breatheMist = () => {
+    const drawCanvas = drawingCanvasRef.current;
+    if (!drawCanvas) return;
+    const ctx = drawCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    
+    // Draw a soft, warm breath fog layer centered on the screen
+    const grad = ctx.createRadialGradient(
+      drawCanvas.width / 2, drawCanvas.height / 2, 40,
+      drawCanvas.width / 2, drawCanvas.height / 2, drawCanvas.width * 0.55
+    );
+    grad.addColorStop(0, 'rgba(238, 244, 250, 0.94)');
+    grad.addColorStop(0.4, 'rgba(228, 238, 248, 0.82)');
+    grad.addColorStop(1, 'rgba(215, 227, 240, 0.4)');
+    
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    
+    // Sprout fresh condensation drops
+    for (let i = 0; i < 180; i++) {
+      const rx = Math.random() * drawCanvas.width;
+      const ry = Math.random() * drawCanvas.height;
+      const rRad = Math.random() * 2.2 + 0.8;
+      ctx.beginPath();
+      ctx.arc(rx, ry, rRad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fill();
+    }
+    ctx.restore();
+    
+    if (enableAudio) {
+      synth.triggerWhoosh();
+    }
+  };
+
   // Main Render Loop
   useEffect(() => {
     if (!isReady) return;
@@ -556,8 +707,16 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         const video = videoRef.current;
         handsDetected = 0;
 
-        // Draw background video: Grayscale + Dimmed to stand out HUD graphics
-        ctx.filter = `grayscale(${grayscaleBackdrop}%) brightness(40%) contrast(110%)`;
+        // Draw background video: Applied CSS filters to stand out HUD graphics
+        let appliedFilter = `grayscale(${grayscaleBackdrop}%) brightness(40%) contrast(110%)`;
+        if (cameraFilter === 'cyberpunk') {
+          appliedFilter = `hue-rotate(130deg) saturate(2.5) brightness(35%) contrast(125%)`;
+        } else if (cameraFilter === 'matrix') {
+          appliedFilter = `hue-rotate(60deg) saturate(1.8) sepia(0.6) brightness(30%) contrast(140%)`;
+        } else if (cameraFilter === 'thermal') {
+          appliedFilter = `invert(1) hue-rotate(180deg) saturate(3) brightness(45%) contrast(130%)`;
+        }
+        ctx.filter = appliedFilter;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.filter = 'none';
 
@@ -699,11 +858,23 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         gestureMode = 'SIMULATING';
         handsDetected = simHandsMode === 'single' ? 1 : 2;
 
-        // Draw synthetic background matrix grid for cyberpunk HUD
-        ctx.fillStyle = '#0F0F0F';
+        // Draw synthetic background matrix grid with dynamic theme color
+        let bgColor = '#0F0F0F';
+        let gridColor = 'rgba(255, 255, 255, 0.05)';
+        if (cameraFilter === 'cyberpunk') {
+          bgColor = '#160822';
+          gridColor = 'rgba(235, 115, 255, 0.08)';
+        } else if (cameraFilter === 'matrix') {
+          bgColor = '#04160a';
+          gridColor = 'rgba(0, 255, 95, 0.08)';
+        } else if (cameraFilter === 'thermal') {
+          bgColor = '#1e0505';
+          gridColor = 'rgba(255, 135, 0, 0.12)';
+        }
+        ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = gridColor;
         ctx.lineWidth = 1;
         // Drawing Grid Lines
         for (let i = 0; i < canvas.width; i += 40) {
@@ -932,6 +1103,46 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
       // SECTION E: DRAW & ANIMATE PARTICLES
       // ------------------------------------
       particles.current.forEach((p, idx) => {
+        // Apply custom physics based on particle type
+        if (p.type === 'fireworks') {
+          p.vy += 0.08; // Gravity pulling ember down
+          p.vx *= 0.985; // Air drag
+          // Bounce off the bottom of the screen
+          if (p.y > canvas.height - 6) {
+            p.y = canvas.height - 6;
+            p.vy = -p.vy * 0.45; // partial elasticity
+            p.vx *= 0.8;
+          }
+        } else if (p.type === 'bubbles') {
+          p.vy -= 0.015; // Float upwards
+          p.vx = Math.sin((p.life + p.size * 10) / 10) * 0.5; // Smooth sway
+          
+          // Hover popping collision check: if hand is near bubble, pop it!
+          if (handsDetected > 0 && trackingX > 0 && trackingY > 0) {
+            const dist = Math.hypot(p.x - trackingX, p.y - trackingY);
+            if (dist < p.size + 20) {
+              p.life = p.maxLife; // Kill bubble
+              
+              // Sprout tiny water droplets
+              for (let d = 0; d < 5; d++) {
+                const spAngle = Math.random() * Math.PI * 2;
+                const spSpeed = Math.random() * 2.2 + 0.8;
+                particles.current.push({
+                  x: p.x,
+                  y: p.y,
+                  vx: Math.cos(spAngle) * spSpeed,
+                  vy: Math.sin(spAngle) * spSpeed - 0.5,
+                  color: p.color,
+                  size: Math.random() * 2 + 1,
+                  maxLife: Math.random() * 12 + 6,
+                  life: 0,
+                  type: 'bubble_spray'
+                });
+              }
+            }
+          }
+        }
+
         p.x += p.vx;
         p.y += p.vy;
         p.life += 1;
@@ -940,7 +1151,6 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         const opacity = 1 - ratio;
         const currentSize = p.size * (1 - ratio * 0.5);
 
-        ctx.fillStyle = p.color;
         ctx.save();
         ctx.globalAlpha = opacity;
 
@@ -956,11 +1166,57 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
           ctx.stroke();
         } else if (p.type === 'squares') {
           // Digital block particle
+          ctx.fillStyle = p.color;
           ctx.fillRect(p.x - currentSize / 2, p.y - currentSize / 2, currentSize, currentSize);
+        } else if (p.type === 'bubbles') {
+          // Glossy spherical soap bubbles with highlight glare
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
+          
+          const bubGrad = ctx.createRadialGradient(
+            p.x - currentSize * 0.3, p.y - currentSize * 0.3, currentSize * 0.1,
+            p.x, p.y, currentSize
+          );
+          bubGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+          bubGrad.addColorStop(0.3, 'rgba(255, 255, 255, 0.1)');
+          bubGrad.addColorStop(0.8, 'rgba(255, 130, 255, 0.2)');
+          bubGrad.addColorStop(0.95, 'rgba(100, 220, 255, 0.4)');
+          bubGrad.addColorStop(1, 'rgba(255, 255, 255, 0.55)');
+          
+          ctx.fillStyle = bubGrad;
+          ctx.fill();
+
+          // Sparkle reflection dot
+          ctx.beginPath();
+          ctx.arc(p.x - currentSize * 0.35, p.y - currentSize * 0.35, currentSize * 0.18, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fill();
+        } else if (p.type === 'bubble_spray') {
+          // Micro spray droplet
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+        } else if (p.type === 'fireworks') {
+          // Fire spark ember with glowing core
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentSize * 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          
+          // White core
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, currentSize * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.shadowBlur = 0;
+          ctx.fill();
         } else {
           // Sparkle circle
           ctx.beginPath();
           ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
           ctx.fill();
         }
 
@@ -1085,6 +1341,23 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
       }
 
       // ------------------------------------
+      // SECTION E4: LIGHTNING FLASH OVERLAY & BOLTS
+      // ------------------------------------
+      if (lightningFlash) {
+        // Draw 1-2 powerful bolts of fractal lightning
+        const lightningCount = Math.random() < 0.45 ? 2 : 1;
+        for (let l = 0; l < lightningCount; l++) {
+          const startX = Math.random() * canvas.width;
+          const startY = 0;
+          // Target either the tracking position (finger tip) or a random ground position
+          const endX = (handsDetected > 0 && trackingX > 0) ? trackingX + (Math.random() - 0.5) * 50 : Math.random() * canvas.width;
+          const endY = (handsDetected > 0 && trackingY > 0) ? trackingY : canvas.height * (0.6 + Math.random() * 0.4);
+          
+          drawLightningBolt(ctx, startX, startY, endX, endY);
+        }
+      }
+
+      // ------------------------------------
       // SECTION F: UPDATE HUD CONTROLLER STATE
       // ------------------------------------
       onStatsUpdate({
@@ -1107,7 +1380,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2, foggyGlassMode, initializeFog]);
+  }, [isReady, useSimulator, grayscaleBackdrop, activeColor, brushSize, brushStyle, pinchThreshold, enableAudio, showMesh, simHandsMode, simHand1, simHand2, foggyGlassMode, initializeFog, cameraFilter, lightningFlash]);
 
   // Simulator Mouse Down Handler
   const handleSimMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1244,8 +1517,32 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
             title="Rainy Window Foggy Wiping Mode"
           >
             <span>🌧️</span>
-            <span>{foggyGlassMode ? 'Foggy Glass (雾气擦玻璃): ON' : '🌧️ Foggy Glass (哈气擦玻璃)'}</span>
+            <span>{foggyGlassMode ? 'Foggy Glass: ON' : '🌧️ Foggy Window (Mist)'}</span>
           </button>
+
+          {foggyGlassMode && (
+            <button 
+              id="breathe-mist-btn"
+              onClick={breatheMist}
+              className="px-3 py-1.5 bg-[#151515] border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:text-white rounded-full text-[10px] uppercase tracking-widest font-mono flex items-center gap-1.5 backdrop-blur-md transition-all duration-300 active:scale-95"
+              title="Breathe warm mist onto the glass window"
+            >
+              <span>💨</span>
+              <span>Blow Mist</span>
+            </button>
+          )}
+
+          {foggyGlassMode && (
+            <button 
+              id="strike-lightning-btn"
+              onClick={triggerLightning}
+              className="px-3 py-1.5 bg-[#151515] border border-amber-500/30 text-amber-300 hover:border-amber-400 hover:text-white rounded-full text-[10px] uppercase tracking-widest font-mono flex items-center gap-1.5 backdrop-blur-md transition-all duration-300 active:scale-95"
+              title="Strike heavy electric storm lightning!"
+            >
+              <span>⚡</span>
+              <span>Lightning</span>
+            </button>
+          )}
 
           {useSimulator && (
             <div className="flex bg-[#151515] border border-[#333] rounded-full p-0.5">
@@ -1267,6 +1564,34 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               >
                 2 Hand Portal
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Compact, elegant Simulator User Assistance Panel */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 max-w-sm text-right select-none pointer-events-none sm:pointer-events-auto">
+          {useSimulator ? (
+            <div className="bg-[#101010]/92 border border-zinc-800 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left">
+              <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1">
+                💻 INTERACTIVE SIMULATOR
+              </span>
+              <p className="text-[10px] text-zinc-400 leading-normal mb-2">
+                Camera access is blocked or unavailable in this iframe. Use our responsive mouse/touch simulation below!
+              </p>
+              <div className="text-[9px] font-mono text-zinc-500 space-y-1 border-t border-zinc-900 pt-2">
+                <div className="flex justify-between"><span>[Cursor]</span> <span className="text-zinc-300">Hover tracking</span></div>
+                <div className="flex justify-between"><span>[Left-Click]</span> <span className="text-zinc-300">Pinch & Paint/Wipe</span></div>
+                <div className="flex justify-between"><span>[Double Hand]</span> <span className="text-zinc-300">Drag control dots</span></div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[#101010]/92 border border-[#00FF5F]/20 rounded-2xl p-3.5 backdrop-blur-md max-w-[280px] shadow-2xl transition-all duration-300 text-left">
+              <span className="text-[9px] tracking-widest text-[#00FF5F] uppercase font-bold block mb-1">
+                📷 WEBCAM CONTROL ACTIVE
+              </span>
+              <p className="text-[10px] text-zinc-300 leading-normal">
+                Make a <strong className="text-white font-semibold">thumb-index pinch</strong> gesture to draw! In Foggy Window mode, pinch and wipe to clean the glass!
+              </p>
             </div>
           )}
         </div>
@@ -1378,7 +1703,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
 
         {/* Collapsible iOS Sliders Panel */}
         {showSettings && (
-          <div className="mt-2 p-3 md:p-4 bg-[#181818] rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 transition-all duration-300">
+          <div className="mt-2 p-3 md:p-4 bg-[#181818] rounded-2xl border border-white/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 transition-all duration-300">
             {/* Brush Size */}
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between text-[11px] font-mono text-zinc-400 uppercase">
@@ -1431,9 +1756,37 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
               />
             </div>
 
+            {/* Camera Filter Style Selector */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Camera Filter</span>
+              <div className="flex bg-zinc-850 border border-zinc-800 rounded-xl p-0.5">
+                {(['slate', 'cyberpunk', 'matrix', 'thermal'] as const).map(filter => {
+                  const filterLabels = {
+                    slate: 'Slate',
+                    cyberpunk: 'Neon',
+                    matrix: 'Matrix',
+                    thermal: 'Heat'
+                  };
+                  return (
+                    <button
+                      key={filter}
+                      onClick={() => setCameraFilter(filter)}
+                      className={`flex-1 py-1 text-[9px] uppercase font-mono rounded-lg tracking-wider transition-all cursor-pointer ${
+                        cameraFilter === filter 
+                          ? 'bg-zinc-700 text-white font-bold' 
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {filterLabels[filter]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Hand Mesh grid toggle */}
             <div className="flex items-center justify-between h-full pt-1">
-              <span className="text-[11px] font-mono text-zinc-400 uppercase">Skeleton Mesh Grid</span>
+              <span className="text-[11px] font-mono text-zinc-400 uppercase">Skeleton Mesh</span>
               <button
                 id="mesh-toggle-btn"
                 onClick={() => setShowMesh(!showMesh)}

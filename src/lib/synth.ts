@@ -97,6 +97,80 @@ class GestureSynth {
     if (!this.ctx || !this.gainNode) return;
     this.gainNode.gain.setValueAtTime(Math.max(0, Math.min(0.2, vol)), this.ctx.currentTime);
   }
+
+  public triggerWhoosh() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+      const now = this.ctx.currentTime;
+      
+      // Create white noise buffer for realistic breath blowing / mist whoosh
+      const bufferSize = this.ctx.sampleRate * 1.5; // 1.5 seconds
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(300, now);
+      noiseFilter.frequency.exponentialRampToValueAtTime(1000, now + 0.35);
+      noiseFilter.frequency.exponentialRampToValueAtTime(180, now + 1.3);
+      noiseFilter.Q.setValueAtTime(2.2, now);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0, now);
+      noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.25);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+      
+      noiseNode.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+    } catch (e) {
+      console.error('Error playing whoosh sound:', e);
+    }
+  }
+
+  public triggerSpark() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+      const now = this.ctx.currentTime;
+      
+      // High frequency spark crackle + low sub bass thunder boom
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(35, now + 0.7);
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(400, now);
+      
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      
+      osc.start(now);
+      osc.stop(now + 0.7);
+    } catch (e) {}
+  }
 }
 
 export const synth = new GestureSynth();
