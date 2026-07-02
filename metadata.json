@@ -1,0 +1,10 @@
+{
+  "name": "AURA.OS Gesture Canvas",
+  "description": "A fluid client-side gesture interaction canvas that tracks thumb-index pinch for drawing, and double-hand pinch/motion for scaling and moving responsive widgets, built with MediaPipe HandLandmarker.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
