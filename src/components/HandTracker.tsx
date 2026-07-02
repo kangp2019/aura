@@ -84,7 +84,7 @@ export default function HandTracker({ onStatsUpdate }: HandTrackerProps) {
   const [foggyGlassMode, setFoggyGlassMode] = useState<boolean>(false);
   const [cameraFilter, setCameraFilter] = useState<'slate' | 'cyberpunk' | 'matrix' | 'thermal'>('slate');
   const [lightningFlash, setLightningFlash] = useState<boolean>(false);
-  const [portalShape, setPortalShape] = useState<'rectangle' | 'heart' | 'circle'>('rectangle');
+  const [portalShape, setPortalShape] = useState<'rectangle' | 'heart' | 'circle'>('heart');
   const [showFlash, setShowFlash] = useState<boolean>(false);
   const [isWinking, setIsWinking] = useState<boolean>(false);
 
